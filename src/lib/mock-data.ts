@@ -5,7 +5,7 @@ export type Turno = {
   dia: number; // 0 = lunes
   inicio: string; // "09:00"
   duracion: number; // en franjas de 30 min
-  estado: "confirmado" | "pendiente" | "cancelado";
+  estado: "confirmado" | "pendiente" | "cancelado" | "realizado";
 };
 
 export const DIAS = [
@@ -42,19 +42,19 @@ export const HORAS = [
 
 export const TURNOS: Turno[] = [
   { id: "t1", cliente: "Valentina Ruiz", servicio: "Masaje descontracturante", dia: 0, inicio: "09:30", duracion: 2, estado: "confirmado" },
-  { id: "t2", cliente: "Martín Sosa", servicio: "Piedras calientes", dia: 0, inicio: "11:30", duracion: 3, estado: "confirmado" },
+  { id: "t2", cliente: "Martín Sosa", servicio: "Piedras calientes", dia: 0, inicio: "11:30", duracion: 3, estado: "realizado" },
   { id: "t3", cliente: "Lucía Ferrari", servicio: "Drenaje linfático", dia: 0, inicio: "16:00", duracion: 2, estado: "pendiente" },
   { id: "t4", cliente: "Camila Ortiz", servicio: "Relajante full body", dia: 1, inicio: "10:00", duracion: 3, estado: "confirmado" },
   { id: "t5", cliente: "Julián Paz", servicio: "Masaje deportivo", dia: 1, inicio: "14:30", duracion: 2, estado: "confirmado" },
-  { id: "t6", cliente: "Rocío Medina", servicio: "Reflexología", dia: 2, inicio: "09:00", duracion: 2, estado: "confirmado" },
+  { id: "t6", cliente: "Rocío Medina", servicio: "Reflexología", dia: 2, inicio: "09:00", duracion: 2, estado: "realizado" },
   { id: "t7", cliente: "Diego Arce", servicio: "Masaje descontracturante", dia: 2, inicio: "12:00", duracion: 2, estado: "cancelado" },
   { id: "t8", cliente: "Sofía Navarro", servicio: "Ritual de aromaterapia", dia: 2, inicio: "17:00", duracion: 3, estado: "pendiente" },
   { id: "t9", cliente: "Elena Castro", servicio: "Piedras calientes", dia: 3, inicio: "10:30", duracion: 3, estado: "confirmado" },
-  { id: "t10", cliente: "Tomás Vega", servicio: "Masaje deportivo", dia: 3, inicio: "15:30", duracion: 2, estado: "confirmado" },
+  { id: "t10", cliente: "Tomás Vega", servicio: "Masaje deportivo", dia: 3, inicio: "15:30", duracion: 2, estado: "realizado" },
   { id: "t11", cliente: "Paula Giménez", servicio: "Relajante full body", dia: 4, inicio: "09:30", duracion: 3, estado: "confirmado" },
   { id: "t12", cliente: "Iván Molina", servicio: "Drenaje linfático", dia: 4, inicio: "13:00", duracion: 2, estado: "pendiente" },
   { id: "t13", cliente: "Ana Beltrán", servicio: "Ritual de aromaterapia", dia: 4, inicio: "17:30", duracion: 2, estado: "confirmado" },
-  { id: "t14", cliente: "Nadia Ríos", servicio: "Reflexología", dia: 5, inicio: "10:00", duracion: 2, estado: "confirmado" },
+  { id: "t14", cliente: "Nadia Ríos", servicio: "Reflexología", dia: 5, inicio: "10:00", duracion: 2, estado: "realizado" },
   { id: "t15", cliente: "Gonzalo Ferro", servicio: "Masaje descontracturante", dia: 5, inicio: "12:30", duracion: 2, estado: "confirmado" },
 ];
 

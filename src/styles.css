@@ -39,6 +39,9 @@
   --color-cream: var(--cream);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-status-success: var(--status-success);
+  --color-status-danger: var(--status-danger);
+  --color-status-warning: var(--status-warning);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -83,6 +86,9 @@
   --accent-foreground: var(--gold);
   --destructive: oklch(0.62 0.19 22);
   --destructive-foreground: oklch(0.97 0.01 85);
+  --status-success: oklch(0.62 0.09 150);
+  --status-danger: oklch(0.55 0.13 22);
+  --status-warning: oklch(0.72 0.1 85);
   --border: oklch(0.86 0.09 89 / 16%);
   --input: oklch(0.86 0.09 89 / 20%);
   --ring: var(--gold);
