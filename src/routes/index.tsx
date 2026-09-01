@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { DIAS, HORAS, TURNOS, type Turno } from "@/lib/mock-data";
 
@@ -22,10 +22,34 @@ export const Route = createFileRoute("/")({
   component: Agenda,
 });
 
-const estadoClase: Record<Turno["estado"], string> = {
-  confirmado: "border-primary/45 bg-primary/12 text-foreground",
-  pendiente: "border-primary/25 bg-secondary/70 text-foreground/85 border-dashed",
-  cancelado: "border-destructive/40 bg-destructive/10 text-muted-foreground line-through",
+const estadoConfig: Record<
+  Turno["estado"],
+  { card: string; time: string; dot: string; label: string }
+> = {
+  confirmado: {
+    card: "border border-primary/45 border-l-4 border-l-primary bg-primary/12 text-foreground",
+    time: "text-primary/80",
+    dot: "bg-primary",
+    label: "Confirmado",
+  },
+  realizado: {
+    card: "border border-status-success/45 border-l-4 border-l-status-success bg-status-success/12 text-foreground",
+    time: "text-status-success",
+    dot: "bg-status-success",
+    label: "Realizado",
+  },
+  pendiente: {
+    card: "border border-dashed border-status-warning/45 border-l-4 border-l-status-warning bg-status-warning/10 text-foreground/90",
+    time: "text-status-warning",
+    dot: "border border-status-warning bg-transparent",
+    label: "Pendiente",
+  },
+  cancelado: {
+    card: "border border-status-danger/40 border-l-4 border-l-status-danger bg-status-danger/10 text-muted-foreground",
+    time: "text-status-danger/70",
+    dot: "bg-status-danger",
+    label: "Cancelado",
+  },
 };
 
 const ROW = 44;
@@ -96,12 +120,23 @@ function Agenda() {
                 return (
                   <article
                     key={turno.id}
-                    className={`absolute left-1.5 right-1.5 overflow-hidden rounded-md border px-3 py-2 text-left transition-transform hover:-translate-y-0.5 ${estadoClase[turno.estado]}`}
+                    className={`absolute left-1.5 right-1.5 overflow-hidden rounded-md px-3 py-2 text-left transition-transform hover:-translate-y-0.5 ${estadoConfig[turno.estado].card}`}
                     style={{ top: top + 3, height: turno.duracion * ROW - 6 }}
                   >
-                    <p className="truncate text-xs font-medium tracking-wide">{turno.cliente}</p>
-                    <p className="truncate text-[0.7rem] text-muted-foreground">{turno.servicio}</p>
-                    <p className="mt-1 text-[0.65rem] uppercase tracking-[0.2em] text-primary/80">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className={`truncate text-xs font-medium tracking-wide ${turno.estado === "cancelado" ? "line-through" : ""}`}>
+                        {turno.cliente}
+                      </p>
+                      {turno.estado === "realizado" ? (
+                        <Check className="mt-0.5 h-3 w-3 shrink-0 text-status-success" />
+                      ) : (
+                        <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${estadoConfig[turno.estado].dot}`} />
+                      )}
+                    </div>
+                    <p className={`truncate text-[0.7rem] text-muted-foreground ${turno.estado === "cancelado" ? "line-through" : ""}`}>
+                      {turno.servicio}
+                    </p>
+                    <p className={`mt-1 text-[0.65rem] uppercase tracking-[0.2em] ${estadoConfig[turno.estado].time}`}>
                       {turno.inicio}
                     </p>
                   </article>
@@ -112,16 +147,21 @@ function Agenda() {
         </div>
       </div>
 
-      <div className="flex gap-6 text-xs text-muted-foreground">
+      <div className="flex flex-wrap gap-6 text-xs text-muted-foreground">
         <span className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-sm border border-primary/45 bg-primary/15" /> Confirmado
+          <span className="h-3 w-3 rounded-sm border border-primary/45 border-l-2 border-l-primary bg-primary/15" />{" "}
+          Confirmado
         </span>
         <span className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-sm border border-dashed border-primary/30 bg-secondary" />{" "}
+          <span className="h-3 w-3 rounded-sm border border-dashed border-status-warning/45 border-l-2 border-l-status-warning bg-status-warning/15" />{" "}
           Pendiente
         </span>
         <span className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-sm border border-destructive/40 bg-destructive/10" />{" "}
+          <span className="h-3 w-3 rounded-sm border border-status-success/45 border-l-2 border-l-status-success bg-status-success/15" />{" "}
+          Realizado
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="h-3 w-3 rounded-sm border border-status-danger/40 border-l-2 border-l-status-danger bg-status-danger/15" />{" "}
           Cancelado
         </span>
       </div>
