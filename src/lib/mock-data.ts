@@ -417,10 +417,6 @@ export const ATENCIONES: Atencion[] = [
 // Bloqueos de horario
 // ---------------------------------------------------------------------------
 
-export const BLOQUEOS: BloqueoHorario[] = [
-  { id: "b1", fecha: D(2), hora_inicio_placeholder: "" } as never,
-].slice(0, 0) as BloqueoHorario[];
-
 export const BLOQUEOS_HORARIO: BloqueoHorario[] = [
   { id: "b1", fecha: D(2), horaInicio: "13:00", horaFin: "14:00", motivo: "Almuerzo" },
   { id: "b2", fecha: D(3), horaInicio: "17:00", horaFin: "18:30", motivo: "Turno personal" },
