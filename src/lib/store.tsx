@@ -83,29 +83,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const cambiarEstadoTurno = useCallback(
     (id: string, estado: EstadoTurno, observaciones?: string) => {
       setTurnos((prev) => prev.map((t) => (t.id === id ? { ...t, estado } : t)));
-      if (estado === "realizado") {
-        setTurnos((prev) => {
-          const turno = prev.find((t) => t.id === id);
-          if (turno) {
-            setAtenciones((actuales) =>
-              actuales.some((a) => a.turnoId === id)
-                ? actuales
-                : [
-                    ...actuales,
-                    {
-                      id: nuevoId("a"),
-                      turnoId: id,
-                      fecha: turno.fecha,
-                      observaciones: observaciones?.trim() || "Sesión realizada sin observaciones.",
-                    },
-                  ],
-            );
-          }
-          return prev;
-        });
-      }
+      if (estado !== "realizado") return;
+      const turno = turnos.find((t) => t.id === id);
+      if (!turno) return;
+      setAtenciones((prev) =>
+        prev.some((a) => a.turnoId === id)
+          ? prev
+          : [
+              ...prev,
+              {
+                id: nuevoId("a"),
+                turnoId: id,
+                fecha: turno.fecha,
+                observaciones: observaciones?.trim() || "Sesión realizada sin observaciones.",
+              },
+            ],
+      );
     },
-    [],
+    [turnos],
   );
 
   const registrarPago = useCallback((datos: Omit<Pago, "id">) => {
