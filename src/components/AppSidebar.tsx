@@ -1,15 +1,19 @@
 import { Link } from "@tanstack/react-router";
-import { CalendarDays, Users, Sparkles, Wallet } from "lucide-react";
+import { CalendarDays, Users, Sparkles, Wallet, Settings, LogOut } from "lucide-react";
 import logo from "@/assets/roshan-lotus.png";
+import { useAuth } from "@/lib/auth";
 
 const items = [
   { title: "Agenda", to: "/", icon: CalendarDays, exact: true },
   { title: "Clientes", to: "/clientes", icon: Users, exact: false },
   { title: "Servicios", to: "/servicios", icon: Sparkles, exact: false },
   { title: "Pagos", to: "/pagos", icon: Wallet, exact: false },
+  { title: "Configuración", to: "/configuracion", icon: Settings, exact: false },
 ] as const;
 
 export function AppSidebar() {
+  const { usuario, cerrarSesion } = useAuth();
+
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
       <div className="flex flex-col items-center gap-3 px-6 py-8">
@@ -38,14 +42,20 @@ export function AppSidebar() {
             <span>{item.title}</span>
           </Link>
         ))}
+
+        <button
+          onClick={cerrarSesion}
+          className="mt-2 flex items-center gap-3 rounded-md px-4 py-3 text-left text-sm tracking-wide text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-status-danger"
+        >
+          <LogOut className="h-4 w-4" strokeWidth={1.5} />
+          <span>Cerrar sesión</span>
+        </button>
       </nav>
 
       <div className="mt-auto px-6 py-8">
         <div className="rounded-md border border-border/60 px-4 py-3">
-          <p className="text-[0.65rem] uppercase tracking-[0.3em] text-muted-foreground">
-            Sesión
-          </p>
-          <p className="mt-1 font-display text-lg text-primary">Studio Roshan</p>
+          <p className="text-[0.65rem] uppercase tracking-[0.3em] text-muted-foreground">Sesión</p>
+          <p className="mt-1 font-display text-lg text-primary">{usuario?.nombre ?? "Studio"}</p>
           <p className="text-xs text-muted-foreground">Panel del propietario</p>
         </div>
       </div>
