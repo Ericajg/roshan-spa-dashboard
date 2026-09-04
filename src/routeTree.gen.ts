@@ -14,6 +14,8 @@ import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PagosRouteImport } from './routes/pagos'
 import { Route as ServiciosRouteImport } from './routes/servicios'
+import { Route as ClientesIndexRouteImport } from './routes/clientes.index'
+import { Route as ClientesClienteIdRouteImport } from './routes/clientes.$clienteId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -40,40 +42,76 @@ const ServiciosRoute = ServiciosRouteImport.update({
   path: '/servicios',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ClientesIndexRoute = ClientesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ClientesRoute,
+} as any)
+const ClientesClienteIdRoute = ClientesClienteIdRouteImport.update({
+  id: '/$clienteId',
+  path: '/$clienteId',
+  getParentRoute: () => ClientesRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/clientes': typeof ClientesRoute
+  '/clientes': typeof ClientesRouteWithChildren
   '/login': typeof LoginRoute
   '/pagos': typeof PagosRoute
   '/servicios': typeof ServiciosRoute
+  '/clientes/$clienteId': typeof ClientesClienteIdRoute
+  '/clientes/': typeof ClientesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/clientes': typeof ClientesRoute
   '/login': typeof LoginRoute
   '/pagos': typeof PagosRoute
   '/servicios': typeof ServiciosRoute
+  '/clientes/$clienteId': typeof ClientesClienteIdRoute
+  '/clientes': typeof ClientesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/clientes': typeof ClientesRoute
+  '/clientes': typeof ClientesRouteWithChildren
   '/login': typeof LoginRoute
   '/pagos': typeof PagosRoute
   '/servicios': typeof ServiciosRoute
+  '/clientes/$clienteId': typeof ClientesClienteIdRoute
+  '/clientes/': typeof ClientesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/clientes' | '/login' | '/pagos' | '/servicios'
+  fullPaths:
+    | '/'
+    | '/clientes'
+    | '/login'
+    | '/pagos'
+    | '/servicios'
+    | '/clientes/$clienteId'
+    | '/clientes/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/clientes' | '/login' | '/pagos' | '/servicios'
-  id: '__root__' | '/' | '/clientes' | '/login' | '/pagos' | '/servicios'
+  to:
+    | '/'
+    | '/login'
+    | '/pagos'
+    | '/servicios'
+    | '/clientes/$clienteId'
+    | '/clientes'
+  id:
+    | '__root__'
+    | '/'
+    | '/clientes'
+    | '/login'
+    | '/pagos'
+    | '/servicios'
+    | '/clientes/$clienteId'
+    | '/clientes/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ClientesRoute: typeof ClientesRoute
+  ClientesRoute: typeof ClientesRouteWithChildren
   LoginRoute: typeof LoginRoute
   PagosRoute: typeof PagosRoute
   ServiciosRoute: typeof ServiciosRoute
@@ -116,12 +154,40 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServiciosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/clientes/': {
+      id: '/clientes/'
+      path: '/'
+      fullPath: '/clientes/'
+      preLoaderRoute: typeof ClientesIndexRouteImport
+      parentRoute: typeof ClientesRoute
+    }
+    '/clientes/$clienteId': {
+      id: '/clientes/$clienteId'
+      path: '/$clienteId'
+      fullPath: '/clientes/$clienteId'
+      preLoaderRoute: typeof ClientesClienteIdRouteImport
+      parentRoute: typeof ClientesRoute
+    }
   }
 }
 
+interface ClientesRouteChildren {
+  ClientesClienteIdRoute: typeof ClientesClienteIdRoute
+  ClientesIndexRoute: typeof ClientesIndexRoute
+}
+
+const ClientesRouteChildren: ClientesRouteChildren = {
+  ClientesClienteIdRoute: ClientesClienteIdRoute,
+  ClientesIndexRoute: ClientesIndexRoute,
+}
+
+const ClientesRouteWithChildren = ClientesRoute._addFileChildren(
+  ClientesRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ClientesRoute: ClientesRoute,
+  ClientesRoute: ClientesRouteWithChildren,
   LoginRoute: LoginRoute,
   PagosRoute: PagosRoute,
   ServiciosRoute: ServiciosRoute,
