@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, Lock, Plus, X } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
-import { StatCard, btnNeutro, btnPrimario } from "@/components/ui-kit";
+import { StatCard, btnPrimario } from "@/components/ui-kit";
 import {
   BloqueoModal,
   NuevoTurnoModal,
@@ -17,7 +17,6 @@ import {
   fechaCorta,
   fechaLarga,
   formatoMoneda,
-  inicioSemana,
   nombreDia,
   semanaDe,
   sumarDias,
