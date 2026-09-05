@@ -42,7 +42,7 @@ const vacio: Omit<Servicio, "id"> = {
   precio: 25000,
   duracion: 60,
   descripcion: "",
-  categoria: CATEGORIAS[0],
+  categoria: CATEGORIAS[0]!,
   activo: true,
 };
 
