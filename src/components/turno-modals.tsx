@@ -281,17 +281,17 @@ export function NuevoTurnoModal({
   onClose,
 }: {
   fechaInicial: string;
-  horaInicial?: string;
-  clienteInicial?: string;
+  horaInicial?: string | undefined;
+  clienteInicial?: string | undefined;
   onClose: () => void;
 }) {
   const { clientes, servicios, turnos, bloqueos, crearTurno } = useStore();
   const activos = servicios.filter((s) => s.activo);
 
-  const [clienteId, setClienteId] = useState(clienteInicial ?? clientes[0]?.id ?? "");
-  const [servicioId, setServicioId] = useState(activos[0]?.id ?? "");
+  const [clienteId, setClienteId] = useState<string>(clienteInicial ?? clientes[0]?.id ?? "");
+  const [servicioId, setServicioId] = useState<string>(activos[0]?.id ?? "");
   const [fecha, setFecha] = useState(fechaInicial);
-  const [hora, setHora] = useState(horaInicial ?? HORAS[0]);
+  const [hora, setHora] = useState(horaInicial ?? HORAS[0]!);
   const [confirmar, setConfirmar] = useState(false);
 
   const servicio = activos.find((s) => s.id === servicioId);

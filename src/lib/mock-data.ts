@@ -159,7 +159,7 @@ export const fechaLarga = (iso: string) => {
 };
 
 export const sumarMinutos = (hora: string, minutos: number) => {
-  const [h, m] = hora.split(":").map(Number);
+  const [h = 0, m = 0] = hora.split(":").map(Number);
   const total = h * 60 + m + minutos;
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 };

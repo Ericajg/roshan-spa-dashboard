@@ -79,7 +79,7 @@ type Modal =
   | { tipo: "turno"; turnoId: string }
   | { tipo: "pago"; turnoId: string }
   | { tipo: "slot"; fecha: string; hora: string }
-  | { tipo: "nuevo"; fecha: string; hora?: string }
+  | { tipo: "nuevo"; fecha: string; hora?: string | undefined }
   | { tipo: "bloqueo"; fecha: string; hora: string }
   | null;
 
@@ -111,7 +111,7 @@ function Agenda() {
 
   const rango =
     vista === "semana"
-      ? `${fechaCorta(semana[0])} al ${fechaCorta(semana[5])}`
+      ? `${fechaCorta(semana[0]!)} al ${fechaCorta(semana[5]!)}`
       : `${nombreDia(fecha)} ${fechaLarga(fecha)}`;
 
   const ocupadoEn = (dia: string, idx: number) => {
@@ -125,7 +125,7 @@ function Agenda() {
     });
     if (conTurno) return true;
     return bloqueos.some(
-      (b) => b.fecha === dia && HORAS[idx] >= b.horaInicio && HORAS[idx] < b.horaFin,
+      (b) => b.fecha === dia && HORAS[idx]! >= b.horaInicio && HORAS[idx]! < b.horaFin,
     );
   };
 
@@ -178,7 +178,7 @@ function Agenda() {
 
             <button
               className={btnPrimario}
-              onClick={() => setModal({ tipo: "nuevo", fecha: vista === "dia" ? fecha : semana[0] })}
+              onClick={() => setModal({ tipo: "nuevo", fecha: vista === "dia" ? fecha : semana[0]! })}
             >
               <Plus className="h-4 w-4" /> Nuevo turno
             </button>
