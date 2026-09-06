@@ -52,14 +52,21 @@ function Clientes() {
     const q = busqueda.trim().toLowerCase();
     if (!q) return clientes;
     return clientes.filter((c) =>
-      `${c.nombre} ${c.apellido} ${c.telefono} ${c.email}`.toLowerCase().includes(q),
+      `${c.nombre} ${c.apellido} ${c.telefono}`.toLowerCase().includes(q),
     );
   }, [clientes, busqueda]);
 
   const sesionesDe = (id: string) =>
     turnos.filter((t) => t.clienteId === id && t.estado === "realizado").length;
 
-  const nuevosDelMes = clientes.filter((c) => !turnos.some((t) => t.clienteId === c.id)).length;
+  const ultimaSesionDe = (id: string) =>
+    turnos
+      .filter((t) => t.clienteId === id && t.estado === "realizado")
+      .sort((a, b) =>
+        a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : b.hora.localeCompare(a.hora),
+      )[0];
+
+  const clientesSinSesiones = clientes.filter((c) => sesionesDe(c.id) === 0).length;
 
   return (
     <div className="space-y-8">
@@ -80,7 +87,7 @@ function Clientes() {
           label="Sesiones realizadas"
           valor={String(turnos.filter((t) => t.estado === "realizado").length)}
         />
-        <StatCard label="Sin sesiones aún" valor={String(nuevosDelMes)} detalle="Primer contacto" />
+        <StatCard label="Clientes sin sesiones" valor={String(clientesSinSesiones)} />
       </div>
 
       <label className="relative block max-w-md">
@@ -88,20 +95,21 @@ function Clientes() {
         <Input
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
-          placeholder="Buscar por nombre, teléfono o email"
+          placeholder="Buscar por nombre, apellido o teléfono"
           className="pl-9"
         />
       </label>
 
-      <div className="panel-luxe overflow-hidden rounded-xl">
-        <table className="w-full text-sm">
+      <div className="panel-luxe overflow-x-auto rounded-xl">
+        <table className="w-full min-w-[960px] text-sm">
           <thead>
             <tr className="border-b border-border text-left text-[0.62rem] uppercase tracking-[0.24em] text-muted-foreground">
               <th className="px-6 py-4">Cliente</th>
               <th className="px-6 py-4">Contacto</th>
-              <th className="px-6 py-4">Nacimiento</th>
+              <th className="px-6 py-4">Última sesión</th>
               <th className="px-6 py-4 text-center">Sesiones</th>
-              <th className="px-6 py-4" />
+              <th className="px-6 py-4 text-center">Editar</th>
+              <th className="px-6 py-4 text-center">Ficha</th>
             </tr>
           </thead>
           <tbody>
@@ -114,9 +122,11 @@ function Clientes() {
                     </span>
                     <div>
                       <p className="text-foreground">{nombreCompleto(c)}</p>
-                      <p className="max-w-xs truncate text-xs text-muted-foreground">
-                        {c.observaciones}
-                      </p>
+                      {c.observaciones ? (
+                        <p className="mt-1 max-w-64 whitespace-normal text-xs leading-relaxed text-muted-foreground">
+                          {c.observaciones}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 </td>
@@ -125,34 +135,35 @@ function Clientes() {
                   <p className="text-xs">{c.email}</p>
                 </td>
                 <td className="px-6 py-4 text-muted-foreground">
-                  {c.fechaNacimiento ? fechaLarga(c.fechaNacimiento) : "—"}
+                  {ultimaSesionDe(c.id) ? fechaLarga(ultimaSesionDe(c.id)?.fecha ?? "") : "Sin sesiones"}
                 </td>
                 <td className="px-6 py-4 text-center">
                   <Badge tono={sesionesDe(c.id) > 0 ? "oro" : "neutro"}>{sesionesDe(c.id)}</Badge>
                 </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      aria-label={`Editar ${nombreCompleto(c)}`}
-                      onClick={() => setEditando(c)}
-                      className="rounded-md border border-border p-2 text-muted-foreground transition-colors hover:text-primary"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <Link
-                      to="/clientes/$clienteId"
-                      params={{ clienteId: c.id }}
-                      className="inline-flex items-center gap-1 rounded-md border border-primary/45 px-3 py-2 text-xs uppercase tracking-[0.18em] text-primary transition-colors hover:bg-primary/10"
-                    >
-                      Ficha <ChevronRight className="h-3 w-3" />
-                    </Link>
-                  </div>
+                <td className="px-6 py-4 text-center">
+                  <button
+                    aria-label={`Editar ${nombreCompleto(c)}`}
+                    title="Editar cliente"
+                    onClick={() => setEditando(c)}
+                    className="inline-flex rounded-md border border-border p-2 text-muted-foreground transition-colors hover:text-primary"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                </td>
+                <td className="px-6 py-4 text-center">
+                  <Link
+                    to="/clientes/$clienteId"
+                    params={{ clienteId: c.id }}
+                    className="inline-flex items-center gap-1 rounded-md border border-primary/45 px-3 py-2 text-xs uppercase tracking-[0.18em] text-primary transition-colors hover:bg-primary/10"
+                  >
+                    Ficha <ChevronRight className="h-3 w-3" />
+                  </Link>
                 </td>
               </tr>
             ))}
             {!filtrados.length ? (
               <tr>
-                <td colSpan={5} className="px-6 py-10 text-center text-muted-foreground">
+                <td colSpan={6} className="px-6 py-10 text-center text-muted-foreground">
                   No se encontraron clientes con ese criterio.
                 </td>
               </tr>
@@ -220,18 +231,18 @@ export function ClienteFormModal({
         </>
       }
     >
-      <div className="grid grid-cols-2 gap-4">
-        <Campo label="Nombre">
-          <Input value={form.nombre} onChange={(e) => set("nombre")(e.target.value)} />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Campo label="Nombre *">
+          <Input required value={form.nombre} onChange={(e) => set("nombre")(e.target.value)} />
         </Campo>
-        <Campo label="Apellido">
-          <Input value={form.apellido} onChange={(e) => set("apellido")(e.target.value)} />
+        <Campo label="Apellido *">
+          <Input required value={form.apellido} onChange={(e) => set("apellido")(e.target.value)} />
         </Campo>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Campo label="Teléfono">
-          <Input value={form.telefono} onChange={(e) => set("telefono")(e.target.value)} />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Campo label="Teléfono *">
+          <Input required value={form.telefono} onChange={(e) => set("telefono")(e.target.value)} />
         </Campo>
         <Campo label="Fecha de nacimiento">
           <Input
