@@ -12,4 +12,9 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Lovable apunta a Cloudflare por defecto. Esta app corre en la PC del
+  // estudio como un proceso Node normal, no en Cloudflare.
+  nitro: {
+    preset: "node-server",
+  },
 });
