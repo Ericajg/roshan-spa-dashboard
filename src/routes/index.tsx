@@ -1,6 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Lock, Plus, X } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Lock,
+  MessageCircle,
+  Plus,
+  X,
+} from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard, btnPrimario } from "@/components/ui-kit";
 import {
@@ -29,8 +37,10 @@ import {
   useBloquearDiaCompleto,
   usePagos,
   useQuitarBloqueo,
+  useTurnosDia,
   useTurnosRango,
 } from "@/lib/queries";
+import { linkWhatsApp, mensajeRecordatorioTurno } from "@/lib/whatsapp";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -97,6 +107,11 @@ function Agenda() {
   const { data: pagos = [] } = usePagos();
   const quitarBloqueo = useQuitarBloqueo();
   const bloquearDiaCompleto = useBloquearDiaCompleto();
+
+  // RF-25: recordatorio ~24hs antes, sin depender de qué semana esté en vista.
+  const manana = sumarDias(HOY, 1);
+  const { data: turnosManana = [] } = useTurnosDia(manana);
+  const recordatoriosManana = turnosManana.filter((t) => t.estado === "reservado");
 
   const mover = (paso: number) =>
     setFecha((f) => sumarDias(f, vista === "semana" ? paso * 7 : paso));
@@ -194,6 +209,34 @@ function Agenda() {
           </>
         }
       />
+
+      {recordatoriosManana.length ? (
+        <div className="panel-luxe rounded-xl p-5">
+          <p className="text-[0.62rem] uppercase tracking-[0.28em] text-muted-foreground">
+            Recordatorios de mañana ({nombreDia(manana)} {fechaCorta(manana)})
+          </p>
+          <ul className="mt-3 space-y-2">
+            {recordatoriosManana.map((t) => (
+              <li
+                key={t.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border/60 px-4 py-2.5"
+              >
+                <span className="text-sm text-foreground">
+                  <span className="text-primary">{t.hora}</span> · {t.cliente} — {t.servicio}
+                </span>
+                <a
+                  className="inline-flex items-center gap-1.5 rounded-md border border-status-success/50 px-3 py-1.5 text-xs uppercase tracking-[0.15em] text-status-success transition-colors hover:bg-status-success/10"
+                  href={linkWhatsApp(t.telefono, mensajeRecordatorioTurno(t))}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" /> Recordar
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="grid gap-5 md:grid-cols-4">
         <StatCard

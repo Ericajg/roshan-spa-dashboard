@@ -1,6 +1,15 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Ban, CalendarClock, CalendarPlus, Check, Lock, UserRound, Wallet } from "lucide-react";
+import {
+  Ban,
+  CalendarClock,
+  CalendarPlus,
+  Check,
+  Lock,
+  MessageCircle,
+  UserRound,
+  Wallet,
+} from "lucide-react";
 import { Modal } from "@/components/Modal";
 import {
   Badge,
@@ -49,6 +58,7 @@ import {
   useTurno,
   useTurnosDia,
 } from "@/lib/queries";
+import { linkWhatsApp, mensajeConfirmacionTurno } from "@/lib/whatsapp";
 
 export const estadoTurnoTono: Record<EstadoTurno, Tono> = {
   reservado: "oro",
@@ -219,6 +229,14 @@ export function TurnoDetalleModal({
                 <Wallet className="h-4 w-4" /> Registrar pago
               </button>
             ) : null}
+            <a
+              className={btnFantasma}
+              href={linkWhatsApp(turno.telefono, mensajeConfirmacionTurno(turno))}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <MessageCircle className="h-4 w-4" /> WhatsApp
+            </a>
             {activo ? (
               <>
                 <button className={btnNeutro} onClick={abrirReprogramar}>
@@ -452,6 +470,13 @@ export function NuevoTurnoModal({
   const [confirmar, setConfirmar] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [creado, setCreado] = useState<{
+    cliente: string;
+    servicio: string;
+    fecha: string;
+    hora: string;
+    telefono: string;
+  } | null>(null);
 
   const clienteIdEfectivo = clienteId || clientes[0]?.id || "";
   const servicioIdEfectivo = servicioId || activos[0]?.id || "";
@@ -477,7 +502,7 @@ export function NuevoTurnoModal({
   const puede = Boolean(clienteIdEfectivo && servicioIdEfectivo && libre);
 
   const guardar = async () => {
-    if (!servicio) return;
+    if (!servicio || !cliente) return;
     setError(null);
     setGuardando(true);
     try {
@@ -489,7 +514,13 @@ export function NuevoTurnoModal({
         hora,
         precio: servicio.precio,
       });
-      onClose();
+      setCreado({
+        cliente: nombreCompleto(cliente),
+        servicio: servicio.nombre,
+        fecha,
+        hora,
+        telefono: cliente.telefono,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo reservar el turno");
       setConfirmar(false);
@@ -502,10 +533,24 @@ export function NuevoTurnoModal({
     <Modal
       abierto
       eyebrow="Agenda"
-      titulo={confirmar ? "Confirmar turno" : "Nuevo turno"}
+      titulo={creado ? "Turno reservado" : confirmar ? "Confirmar turno" : "Nuevo turno"}
       onClose={onClose}
       footer={
-        confirmar ? (
+        creado ? (
+          <>
+            <a
+              className={btnFantasma}
+              href={linkWhatsApp(creado.telefono, mensajeConfirmacionTurno(creado))}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <MessageCircle className="h-4 w-4" /> Avisar por WhatsApp
+            </a>
+            <button className={btnPrimario} onClick={onClose}>
+              <Check className="h-4 w-4" /> Listo
+            </button>
+          </>
+        ) : confirmar ? (
           <>
             <button className={btnNeutro} onClick={() => setConfirmar(false)} disabled={guardando}>
               Volver
@@ -526,7 +571,14 @@ export function NuevoTurnoModal({
         )
       }
     >
-      {confirmar ? (
+      {creado ? (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            El turno de {creado.cliente} quedó reservado para el {fechaLarga(creado.fecha)} a las{" "}
+            {creado.hora} hs. ¿Le avisamos por WhatsApp?
+          </p>
+        </div>
+      ) : confirmar ? (
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
             Revisá los datos antes de agendar la sesión.
