@@ -45,7 +45,9 @@ export function Modal({
         <div className="flex items-start justify-between gap-4">
           <div>
             {eyebrow ? (
-              <p className="text-[0.62rem] uppercase tracking-[0.34em] text-primary/70">{eyebrow}</p>
+              <p className="text-[0.62rem] uppercase tracking-[0.34em] text-primary/70">
+                {eyebrow}
+              </p>
             ) : null}
             <h2 className="mt-1 font-display text-2xl">{titulo}</h2>
           </div>

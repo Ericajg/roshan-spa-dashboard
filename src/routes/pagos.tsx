@@ -5,13 +5,8 @@ import { PageHeader } from "@/components/PageHeader";
 import { Badge, Select, StatCard, btnFantasma } from "@/components/ui-kit";
 import { PagoModal } from "@/components/turno-modals";
 import { HOY, fechaLarga, formatoMoneda, semanaDe } from "@/lib/mock-data";
-import {
-  MEDIOS_PAGO,
-  estadoCobro,
-  nombreCompleto,
-  pagadoDeTurno,
-  useStore,
-} from "@/lib/store";
+import { MEDIOS_PAGO, estadoCobro, pagadoDeTurno } from "@/lib/store";
+import { usePagos, useTurnosRango } from "@/lib/queries";
 
 export const Route = createFileRoute("/pagos")({
   head: () => ({
@@ -36,12 +31,12 @@ const cobroTono = { cobrado: "verde", parcial: "ambar", pendiente: "rojo" } as c
 const cobroLabel = { cobrado: "Cobrado", parcial: "Seña", pendiente: "Sin cobrar" } as const;
 
 function Pagos() {
-  const { pagos, turnos, clientes, servicios } = useStore();
+  const semana = useMemo(() => semanaDe(HOY), []);
+  const { data: pagos = [] } = usePagos();
+  const { data: turnosSemana = [] } = useTurnosRango(semana[0]!, semana[5]!);
   const [medio, setMedio] = useState<string>("todos");
   const [tipo, setTipo] = useState<string>("todos");
   const [cobrando, setCobrando] = useState<string | null>(null);
-
-  const semana = useMemo(() => semanaDe(HOY), []);
 
   const totalSemana = pagos
     .filter((p) => semana.includes(p.fecha))
@@ -55,12 +50,10 @@ function Pagos() {
     .filter((p) => semana.includes(p.fecha) && p.medio === "Efectivo")
     .reduce((a, p) => a + p.monto, 0);
 
-  const pendientes = turnos
+  // Saldos pendientes de la semana en curso (coherente con el resto de la página).
+  const pendientes = turnosSemana
     .filter((t) => t.estado !== "cancelado")
-    .map((t) => {
-      const precio = servicios.find((s) => s.id === t.servicioId)?.precio ?? 0;
-      return { turno: t, saldo: Math.max(0, precio - pagadoDeTurno(pagos, t.id)) };
-    })
+    .map((t) => ({ turno: t, saldo: Math.max(0, t.precioAcordado - pagadoDeTurno(pagos, t.id)) }))
     .filter((x) => x.saldo > 0);
 
   const saldoTotal = pendientes.reduce((a, x) => a + x.saldo, 0);
@@ -70,13 +63,6 @@ function Pagos() {
     .filter((p) => (tipo === "todos" ? true : p.tipo === tipo))
     .slice()
     .sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0));
-
-  const datosTurno = (turnoId: string) => {
-    const turno = turnos.find((t) => t.id === turnoId);
-    const cliente = clientes.find((c) => c.id === turno?.clienteId);
-    const servicio = servicios.find((s) => s.id === turno?.servicioId);
-    return { turno, cliente, servicio };
-  };
 
   return (
     <div className="space-y-8">
@@ -93,7 +79,7 @@ function Pagos() {
         <StatCard
           label="Saldo por cobrar"
           valor={formatoMoneda(saldoTotal)}
-          detalle={`${pendientes.length} turnos`}
+          detalle={`${pendientes.length} turnos de la semana`}
         />
       </div>
 
@@ -130,26 +116,23 @@ function Pagos() {
               </tr>
             </thead>
             <tbody>
-              {filtrados.map((p) => {
-                const { cliente, servicio } = datosTurno(p.turnoId);
-                return (
-                  <tr
-                    key={p.id}
-                    className="border-b border-border/40 last:border-b-0 hover:bg-accent/40"
-                  >
-                    <td className="px-6 py-4 text-muted-foreground">{fechaLarga(p.fecha)}</td>
-                    <td className="px-6 py-4">{cliente ? nombreCompleto(cliente) : "—"}</td>
-                    <td className="px-6 py-4 text-muted-foreground">{servicio?.nombre ?? "—"}</td>
-                    <td className="px-6 py-4">
-                      <Badge tono={p.tipo === "Seña" ? "ambar" : "verde"}>{p.tipo}</Badge>
-                    </td>
-                    <td className="px-6 py-4 text-muted-foreground">{p.medio}</td>
-                    <td className="px-6 py-4 text-right font-display text-lg text-primary">
-                      {formatoMoneda(p.monto)}
-                    </td>
-                  </tr>
-                );
-              })}
+              {filtrados.map((p) => (
+                <tr
+                  key={p.id}
+                  className="border-b border-border/40 last:border-b-0 hover:bg-accent/40"
+                >
+                  <td className="px-6 py-4 text-muted-foreground">{fechaLarga(p.fecha)}</td>
+                  <td className="px-6 py-4">{p.cliente}</td>
+                  <td className="px-6 py-4 text-muted-foreground">{p.servicio}</td>
+                  <td className="px-6 py-4">
+                    <Badge tono={p.tipo === "Seña" ? "ambar" : "verde"}>{p.tipo}</Badge>
+                  </td>
+                  <td className="px-6 py-4 text-muted-foreground">{p.medio}</td>
+                  <td className="px-6 py-4 text-right font-display text-lg text-primary">
+                    {formatoMoneda(p.monto)}
+                  </td>
+                </tr>
+              ))}
               {!filtrados.length ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-10 text-center text-muted-foreground">
@@ -166,16 +149,14 @@ function Pagos() {
         <h2 className="font-display text-2xl">Saldos pendientes</h2>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {pendientes.map(({ turno, saldo }) => {
-            const { cliente, servicio } = datosTurno(turno.id);
-            const precio = servicio?.precio ?? 0;
-            const cobro = estadoCobro(precio, pagadoDeTurno(pagos, turno.id));
+            const cobro = estadoCobro(turno.precioAcordado, pagadoDeTurno(pagos, turno.id));
             return (
               <article key={turno.id} className="panel-luxe rounded-xl p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-foreground">{cliente ? nombreCompleto(cliente) : "—"}</p>
+                    <p className="text-foreground">{turno.cliente}</p>
                     <p className="text-xs text-muted-foreground">
-                      {servicio?.nombre} · {fechaLarga(turno.fecha)} {turno.hora}
+                      {turno.servicio} · {fechaLarga(turno.fecha)} {turno.hora}
                     </p>
                   </div>
                   <Badge tono={cobroTono[cobro]}>{cobroLabel[cobro]}</Badge>

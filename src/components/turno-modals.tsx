@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Ban, CalendarPlus, Check, Lock, UserRound, Wallet } from "lucide-react";
+import { Ban, CalendarClock, CalendarPlus, Check, Lock, UserRound, Wallet } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import {
   Badge,
@@ -32,8 +32,23 @@ import {
   nombreCompleto,
   ocupacionDelDia,
   pagadoDeTurno,
-  useStore,
 } from "@/lib/store";
+import {
+  useAtencion,
+  useBloqueos,
+  useBloquearHorario,
+  useCambiarEstadoTurno,
+  useClientes,
+  useCliente,
+  useCrearAtencion,
+  useCrearPago,
+  useCrearTurno,
+  usePagos,
+  useReprogramarTurno,
+  useServicios,
+  useTurno,
+  useTurnosDia,
+} from "@/lib/queries";
 
 export const estadoTurnoTono: Record<EstadoTurno, Tono> = {
   reservado: "oro",
@@ -65,49 +80,134 @@ export function TurnoDetalleModal({
   onClose: () => void;
   onRegistrarPago: (turnoId: string) => void;
 }) {
-  const { turnos, clientes, servicios, pagos, atenciones, cambiarEstadoTurno } = useStore();
+  const { data: turno } = useTurno(turnoId);
+  const { data: cliente } = useCliente(turno?.idCliente ?? null);
+  const { data: pagos = [] } = usePagos();
+  const { data: atencion } = useAtencion(turnoId, turno?.estado === "realizado");
+  const cambiarEstado = useCambiarEstadoTurno();
+  const crearAtencion = useCrearAtencion();
+  const reprogramarTurno = useReprogramarTurno();
   const navigate = useNavigate();
-  const [confirmando, setConfirmando] = useState<null | "realizado" | "cancelado" | "ausente">(null);
+
+  const [confirmando, setConfirmando] = useState<null | "realizado" | "cancelado" | "ausente">(
+    null,
+  );
   const [observaciones, setObservaciones] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  const [reprogramando, setReprogramando] = useState(false);
+  const [nuevaFecha, setNuevaFecha] = useState("");
+  const [nuevaHora, setNuevaHora] = useState("");
 
-  const turno = turnos.find((t) => t.id === turnoId);
-  if (!turno) return null;
+  const { data: turnosNuevaFecha = [] } = useTurnosDia(reprogramando ? nuevaFecha : "");
+  const { data: bloqueosDisponibilidad = [] } = useBloqueos();
 
-  const cliente = clientes.find((c) => c.id === turno.clienteId);
-  const servicio = servicios.find((s) => s.id === turno.servicioId);
-  const precio = servicio?.precio ?? 0;
+  if (!turno) {
+    return (
+      <Modal abierto titulo="Turno" onClose={onClose}>
+        <p className="text-sm text-muted-foreground">Cargando…</p>
+      </Modal>
+    );
+  }
+
+  const precio = turno.precioAcordado;
   const pagado = pagadoDeTurno(pagos, turno.id);
   const cobro = estadoCobro(precio, pagado);
-  const atencion = atenciones.find((a) => a.turnoId === turno.id);
   const pagosTurno = pagos.filter((p) => p.turnoId === turno.id);
   const activo = turno.estado === "reservado";
 
-  const aplicar = (estado: EstadoTurno) => {
-    cambiarEstadoTurno(turno.id, estado, observaciones);
-    setConfirmando(null);
-    onClose();
+  const aplicar = async (estado: "realizado" | "cancelado" | "ausente") => {
+    setError(null);
+    setGuardando(true);
+    try {
+      if (estado === "realizado") {
+        await crearAtencion.mutateAsync({ id: turno.id, observaciones });
+      } else {
+        await cambiarEstado.mutateAsync({ id: turno.id, estado });
+      }
+      setConfirmando(null);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo actualizar el turno");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const abrirReprogramar = () => {
+    setNuevaFecha(turno.fecha);
+    setNuevaHora(turno.hora);
+    setError(null);
+    setReprogramando(true);
+  };
+
+  const franjasNuevas = franjasDeServicio(turno.duracion);
+  const ocupadosNuevaFecha = ocupacionDelDia(
+    nuevaFecha,
+    turnosNuevaFecha.filter((t) => t.id !== turno.id),
+    bloqueosDisponibilidad,
+  );
+  const inicioNuevo = HORAS.indexOf(nuevaHora);
+  const cabeNuevo = inicioNuevo >= 0 && inicioNuevo + franjasNuevas <= HORAS.length;
+  const libreNuevo =
+    cabeNuevo &&
+    Array.from({ length: franjasNuevas }, (_, i) => inicioNuevo + i).every(
+      (i) => !ocupadosNuevaFecha.has(i),
+    );
+  const cambioTrivial = nuevaFecha === turno.fecha && nuevaHora === turno.hora;
+
+  const confirmarReprogramar = async () => {
+    setError(null);
+    setGuardando(true);
+    try {
+      await reprogramarTurno.mutateAsync({ id: turno.id, fecha: nuevaFecha, hora: nuevaHora });
+      setReprogramando(false);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo reprogramar el turno");
+    } finally {
+      setGuardando(false);
+    }
   };
 
   return (
     <Modal
       abierto
       eyebrow={`${nombreDia(turno.fecha)} · ${fechaLarga(turno.fecha)}`}
-      titulo={cliente ? nombreCompleto(cliente) : "Turno"}
+      titulo={turno.cliente}
       onClose={onClose}
       footer={
-        confirmando ? null : (
-          <>
-            {cliente ? (
+        confirmando || reprogramando ? (
+          reprogramando ? (
+            <>
               <button
                 className={btnNeutro}
-                onClick={() => {
-                  onClose();
-                  navigate({ to: "/clientes/$clienteId", params: { clienteId: cliente.id } });
-                }}
+                onClick={() => setReprogramando(false)}
+                disabled={guardando}
               >
-                <UserRound className="h-4 w-4" /> Ver ficha
+                Volver
               </button>
-            ) : null}
+              <button
+                className={btnPrimario}
+                disabled={!libreNuevo || cambioTrivial || guardando}
+                onClick={() => void confirmarReprogramar()}
+              >
+                <CalendarClock className="h-4 w-4" />
+                {guardando ? "Guardando…" : "Confirmar nuevo horario"}
+              </button>
+            </>
+          ) : null
+        ) : (
+          <>
+            <button
+              className={btnNeutro}
+              onClick={() => {
+                onClose();
+                navigate({ to: "/clientes/$clienteId", params: { clienteId: turno.idCliente } });
+              }}
+            >
+              <UserRound className="h-4 w-4" /> Ver ficha
+            </button>
             {turno.estado !== "cancelado" && cobro !== "cobrado" ? (
               <button
                 className={btnFantasma}
@@ -121,6 +221,9 @@ export function TurnoDetalleModal({
             ) : null}
             {activo ? (
               <>
+                <button className={btnNeutro} onClick={abrirReprogramar}>
+                  <CalendarClock className="h-4 w-4" /> Reprogramar
+                </button>
                 <button className={btnPeligro} onClick={() => setConfirmando("cancelado")}>
                   <Ban className="h-4 w-4" /> Cancelar turno
                 </button>
@@ -141,9 +244,54 @@ export function TurnoDetalleModal({
           estado={confirmando}
           observaciones={observaciones}
           setObservaciones={setObservaciones}
+          error={error}
+          guardando={guardando}
           onCancelar={() => setConfirmando(null)}
-          onConfirmar={() => aplicar(confirmando)}
+          onConfirmar={() => void aplicar(confirmando)}
         />
+      ) : reprogramando ? (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Elegí la nueva fecha y hora. El horario actual ({turno.hora} –{" "}
+            {sumarMinutos(turno.hora, turno.duracion)} del {fechaLarga(turno.fecha)}) queda
+            disponible.
+          </p>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Campo label="Fecha">
+              <Input
+                type="date"
+                value={nuevaFecha}
+                onChange={(e) => setNuevaFecha(e.target.value)}
+              />
+            </Campo>
+            <Campo label="Hora de inicio">
+              <Select value={nuevaHora} onChange={(e) => setNuevaHora(e.target.value)}>
+                {HORAS.map((h) => (
+                  <option key={h} value={h}>
+                    {h}
+                  </option>
+                ))}
+              </Select>
+            </Campo>
+          </div>
+
+          {cambioTrivial ? (
+            <p className="text-xs text-muted-foreground">Elegí una fecha u hora distinta.</p>
+          ) : !libreNuevo ? (
+            <p className="rounded-md border border-status-danger/50 bg-status-danger/10 px-3 py-2 text-xs text-status-danger">
+              {cabeNuevo
+                ? "Ese horario ya está ocupado o bloqueado. Elegí otro."
+                : "La sesión no entra dentro del horario de atención."}
+            </p>
+          ) : (
+            <p className="text-xs text-status-success">
+              Horario disponible ({nuevaHora} – {sumarMinutos(nuevaHora, turno.duracion)}).
+            </p>
+          )}
+
+          {error ? <p className="text-xs text-status-danger">{error}</p> : null}
+        </div>
       ) : (
         <>
           <div className="flex flex-wrap gap-2">
@@ -152,12 +300,12 @@ export function TurnoDetalleModal({
           </div>
 
           <div className="space-y-2">
-            <Detalle label="Servicio">{servicio?.nombre ?? "—"}</Detalle>
+            <Detalle label="Servicio">{turno.servicio}</Detalle>
             <Detalle label="Horario">
-              {turno.hora} – {sumarMinutos(turno.hora, servicio?.duracion ?? 60)}
+              {turno.hora} – {sumarMinutos(turno.hora, turno.duracion)}
             </Detalle>
-            <Detalle label="Duración">{servicio?.duracion ?? 60} min</Detalle>
-            <Detalle label="Teléfono">{cliente?.telefono ?? "—"}</Detalle>
+            <Detalle label="Duración">{turno.duracion} min</Detalle>
+            <Detalle label="Teléfono">{turno.telefono}</Detalle>
             <Detalle label="Precio">{formatoMoneda(precio)}</Detalle>
             <Detalle label="Pagado">{formatoMoneda(pagado)}</Detalle>
             <Detalle label="Saldo">
@@ -199,7 +347,9 @@ export function TurnoDetalleModal({
               <p className="text-[0.62rem] uppercase tracking-[0.28em] text-status-success">
                 Atención registrada
               </p>
-              <p className="mt-1 text-sm text-foreground/90">{atencion.observaciones}</p>
+              <p className="mt-1 text-sm text-foreground/90">
+                {atencion.observaciones || "Sesión realizada sin observaciones."}
+              </p>
             </div>
           ) : null}
         </>
@@ -212,12 +362,16 @@ function ConfirmacionEstado({
   estado,
   observaciones,
   setObservaciones,
+  error,
+  guardando,
   onCancelar,
   onConfirmar,
 }: {
   estado: "realizado" | "cancelado" | "ausente";
   observaciones: string;
   setObservaciones: (v: string) => void;
+  error: string | null;
+  guardando: boolean;
   onCancelar: () => void;
   onConfirmar: () => void;
 }) {
@@ -258,12 +412,14 @@ function ConfirmacionEstado({
         </Campo>
       ) : null}
 
+      {error ? <p className="text-xs text-status-danger">{error}</p> : null}
+
       <div className="flex justify-end gap-3">
-        <button className={btnNeutro} onClick={onCancelar}>
+        <button className={btnNeutro} onClick={onCancelar} disabled={guardando}>
           Volver
         </button>
-        <button className={textos.clase} onClick={onConfirmar}>
-          {textos.boton}
+        <button className={textos.clase} onClick={onConfirmar} disabled={guardando}>
+          {guardando ? "Guardando…" : textos.boton}
         </button>
       </div>
     </div>
@@ -285,33 +441,61 @@ export function NuevoTurnoModal({
   clienteInicial?: string | undefined;
   onClose: () => void;
 }) {
-  const { clientes, servicios, turnos, bloqueos, crearTurno } = useStore();
+  const { data: clientes = [] } = useClientes();
+  const { data: servicios = [] } = useServicios();
   const activos = servicios.filter((s) => s.activo);
 
-  const [clienteId, setClienteId] = useState<string>(clienteInicial ?? clientes[0]?.id ?? "");
-  const [servicioId, setServicioId] = useState<string>(activos[0]?.id ?? "");
+  const [clienteId, setClienteId] = useState<string>(clienteInicial ?? "");
+  const [servicioId, setServicioId] = useState<string>("");
   const [fecha, setFecha] = useState(fechaInicial);
   const [hora, setHora] = useState(horaInicial ?? HORAS[0]!);
   const [confirmar, setConfirmar] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
 
-  const servicio = activos.find((s) => s.id === servicioId);
-  const cliente = clientes.find((c) => c.id === clienteId);
+  const clienteIdEfectivo = clienteId || clientes[0]?.id || "";
+  const servicioIdEfectivo = servicioId || activos[0]?.id || "";
+
+  const servicio = activos.find((s) => s.id === servicioIdEfectivo);
+  const cliente = clientes.find((c) => c.id === clienteIdEfectivo);
   const franjas = franjasDeServicio(servicio?.duracion ?? 60);
 
+  const { data: turnosDia = [] } = useTurnosDia(fecha);
+  const { data: bloqueos = [] } = useBloqueos();
+
   const ocupados = useMemo(
-    () => ocupacionDelDia(fecha, turnos, servicios, bloqueos),
-    [fecha, turnos, servicios, bloqueos],
+    () => ocupacionDelDia(fecha, turnosDia, bloqueos),
+    [fecha, turnosDia, bloqueos],
   );
+
+  const crearTurno = useCrearTurno();
 
   const inicio = HORAS.indexOf(hora);
   const cabe = inicio >= 0 && inicio + franjas <= HORAS.length;
   const libre =
     cabe && Array.from({ length: franjas }, (_, i) => inicio + i).every((i) => !ocupados.has(i));
-  const puede = Boolean(clienteId && servicioId && libre);
+  const puede = Boolean(clienteIdEfectivo && servicioIdEfectivo && libre);
 
-  const guardar = () => {
-    crearTurno({ clienteId, servicioId, fecha, hora });
-    onClose();
+  const guardar = async () => {
+    if (!servicio) return;
+    setError(null);
+    setGuardando(true);
+    try {
+      // RF-20 / RN-06: el precio se fija al momento de reservar.
+      await crearTurno.mutateAsync({
+        idCliente: clienteIdEfectivo,
+        idServicio: servicioIdEfectivo,
+        fecha,
+        hora,
+        precio: servicio.precio,
+      });
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo reservar el turno");
+      setConfirmar(false);
+    } finally {
+      setGuardando(false);
+    }
   };
 
   return (
@@ -323,11 +507,11 @@ export function NuevoTurnoModal({
       footer={
         confirmar ? (
           <>
-            <button className={btnNeutro} onClick={() => setConfirmar(false)}>
+            <button className={btnNeutro} onClick={() => setConfirmar(false)} disabled={guardando}>
               Volver
             </button>
-            <button className={btnPrimario} onClick={guardar}>
-              <Check className="h-4 w-4" /> Confirmar turno
+            <button className={btnPrimario} onClick={() => void guardar()} disabled={guardando}>
+              <Check className="h-4 w-4" /> {guardando ? "Guardando…" : "Confirmar turno"}
             </button>
           </>
         ) : (
@@ -354,11 +538,12 @@ export function NuevoTurnoModal({
             {hora} – {sumarMinutos(hora, servicio?.duracion ?? 60)}
           </Detalle>
           <Detalle label="Precio">{formatoMoneda(servicio?.precio ?? 0)}</Detalle>
+          {error ? <p className="text-xs text-status-danger">{error}</p> : null}
         </div>
       ) : (
         <>
           <Campo label="Cliente">
-            <Select value={clienteId} onChange={(e) => setClienteId(e.target.value)}>
+            <Select value={clienteIdEfectivo} onChange={(e) => setClienteId(e.target.value)}>
               {clientes.map((c) => (
                 <option key={c.id} value={c.id}>
                   {nombreCompleto(c)}
@@ -368,7 +553,7 @@ export function NuevoTurnoModal({
           </Campo>
 
           <Campo label="Servicio" hint="Solo se listan los servicios activos.">
-            <Select value={servicioId} onChange={(e) => setServicioId(e.target.value)}>
+            <Select value={servicioIdEfectivo} onChange={(e) => setServicioId(e.target.value)}>
               {activos.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.nombre} · {s.duracion} min · {formatoMoneda(s.precio)}
@@ -414,25 +599,47 @@ export function NuevoTurnoModal({
 // ---------------------------------------------------------------------------
 
 export function PagoModal({ turnoId, onClose }: { turnoId: string; onClose: () => void }) {
-  const { turnos, clientes, servicios, pagos, registrarPago } = useStore();
-  const turno = turnos.find((t) => t.id === turnoId);
-  const servicio = servicios.find((s) => s.id === turno?.servicioId);
-  const cliente = clientes.find((c) => c.id === turno?.clienteId);
-  const precio = servicio?.precio ?? 0;
-  const pagado = turno ? pagadoDeTurno(pagos, turno.id) : 0;
+  const { data: turno } = useTurno(turnoId);
+  const { data: pagos = [] } = usePagos();
+  const crearPago = useCrearPago();
+
+  const precio = turno?.precioAcordado ?? 0;
+  const pagado = pagadoDeTurno(pagos, turnoId);
   const saldo = Math.max(0, precio - pagado);
 
   const [tipo, setTipo] = useState<(typeof TIPOS_PAGO)[number]>(pagado > 0 ? "Pago" : "Seña");
   const [medio, setMedio] = useState<(typeof MEDIOS_PAGO)[number]>("Efectivo");
   const [monto, setMonto] = useState(String(saldo));
+  const [error, setError] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
 
-  if (!turno) return null;
+  if (!turno) {
+    return (
+      <Modal abierto titulo="Registrar pago" onClose={onClose}>
+        <p className="text-sm text-muted-foreground">Cargando…</p>
+      </Modal>
+    );
+  }
 
   const valor = Number(monto) || 0;
 
-  const guardar = () => {
-    registrarPago({ turnoId: turno.id, fecha: turno.fecha, tipo, medio, monto: valor });
-    onClose();
+  const guardar = async () => {
+    setError(null);
+    setGuardando(true);
+    try {
+      await crearPago.mutateAsync({
+        turnoId: turno.id,
+        fecha: turno.fecha,
+        tipo,
+        medio,
+        monto: valor,
+      });
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo registrar el pago");
+    } finally {
+      setGuardando(false);
+    }
   };
 
   return (
@@ -443,18 +650,22 @@ export function PagoModal({ turnoId, onClose }: { turnoId: string; onClose: () =
       onClose={onClose}
       footer={
         <>
-          <button className={btnNeutro} onClick={onClose}>
+          <button className={btnNeutro} onClick={onClose} disabled={guardando}>
             Cancelar
           </button>
-          <button className={btnPrimario} disabled={valor <= 0} onClick={guardar}>
-            <Wallet className="h-4 w-4" /> Registrar
+          <button
+            className={btnPrimario}
+            disabled={valor <= 0 || guardando}
+            onClick={() => void guardar()}
+          >
+            <Wallet className="h-4 w-4" /> {guardando ? "Guardando…" : "Registrar"}
           </button>
         </>
       }
     >
       <div className="space-y-2">
-        <Detalle label="Cliente">{cliente ? nombreCompleto(cliente) : "—"}</Detalle>
-        <Detalle label="Servicio">{servicio?.nombre ?? "—"}</Detalle>
+        <Detalle label="Cliente">{turno.cliente}</Detalle>
+        <Detalle label="Servicio">{turno.servicio}</Detalle>
         <Detalle label="Precio">{formatoMoneda(precio)}</Detalle>
         <Detalle label="Saldo pendiente">{formatoMoneda(saldo)}</Detalle>
       </div>
@@ -495,6 +706,8 @@ export function PagoModal({ turnoId, onClose }: { turnoId: string; onClose: () =
           onChange={(e) => setMonto(e.target.value)}
         />
       </Campo>
+
+      {error ? <p className="text-xs text-status-danger">{error}</p> : null}
     </Modal>
   );
 }
@@ -546,18 +759,22 @@ export function BloqueoModal({
   hora: string;
   onClose: () => void;
 }) {
-  const { bloquearHorario } = useStore();
-  const [motivo, setMotivo] = useState("");
+  const bloquearHorario = useBloquearHorario();
   const [minutos, setMinutos] = useState(60);
+  const [error, setError] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
 
-  const guardar = () => {
-    bloquearHorario({
-      fecha,
-      horaInicio: hora,
-      horaFin: sumarMinutos(hora, minutos),
-      motivo: motivo.trim() || "Sin disponibilidad",
-    });
-    onClose();
+  const guardar = async () => {
+    setError(null);
+    setGuardando(true);
+    try {
+      await bloquearHorario.mutateAsync({ fecha, horaInicio: hora, minutos });
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo bloquear el horario");
+    } finally {
+      setGuardando(false);
+    }
   };
 
   return (
@@ -569,11 +786,11 @@ export function BloqueoModal({
       onClose={onClose}
       footer={
         <>
-          <button className={btnNeutro} onClick={onClose}>
+          <button className={btnNeutro} onClick={onClose} disabled={guardando}>
             Cancelar
           </button>
-          <button className={btnPrimario} onClick={guardar}>
-            <Lock className="h-4 w-4" /> Bloquear
+          <button className={btnPrimario} onClick={() => void guardar()} disabled={guardando}>
+            <Lock className="h-4 w-4" /> {guardando ? "Bloqueando…" : "Bloquear"}
           </button>
         </>
       }
@@ -587,13 +804,7 @@ export function BloqueoModal({
           <option value={120}>2 horas</option>
         </Select>
       </Campo>
-      <Campo label="Motivo">
-        <Input
-          value={motivo}
-          onChange={(e) => setMotivo(e.target.value)}
-          placeholder="Almuerzo, trámite, descanso…"
-        />
-      </Campo>
+      {error ? <p className="text-xs text-status-danger">{error}</p> : null}
     </Modal>
   );
 }

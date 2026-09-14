@@ -23,13 +23,14 @@ import {
   sumarMinutos,
   type EstadoTurno,
 } from "@/lib/mock-data";
+import { agruparBloqueos, estadoCobro, franjasDeServicio, pagadoDeTurno } from "@/lib/store";
 import {
-  estadoCobro,
-  franjasDeServicio,
-  nombreCompleto,
-  pagadoDeTurno,
-  useStore,
-} from "@/lib/store";
+  useBloqueos,
+  useBloquearDiaCompleto,
+  usePagos,
+  useQuitarBloqueo,
+  useTurnosRango,
+} from "@/lib/queries";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -84,13 +85,18 @@ type Modal =
   | null;
 
 function Agenda() {
-  const { turnos, clientes, servicios, pagos, bloqueos, quitarBloqueo } = useStore();
   const [vista, setVista] = useState<"dia" | "semana">("semana");
   const [fecha, setFecha] = useState(HOY);
   const [modal, setModal] = useState<Modal>(null);
 
   const dias = useMemo(() => (vista === "semana" ? semanaDe(fecha) : [fecha]), [vista, fecha]);
   const semana = useMemo(() => semanaDe(fecha), [fecha]);
+
+  const { data: turnos = [] } = useTurnosRango(semana[0]!, semana[5]!);
+  const { data: bloqueos = [] } = useBloqueos();
+  const { data: pagos = [] } = usePagos();
+  const quitarBloqueo = useQuitarBloqueo();
+  const bloquearDiaCompleto = useBloquearDiaCompleto();
 
   const mover = (paso: number) =>
     setFecha((f) => sumarDias(f, vista === "semana" ? paso * 7 : paso));
@@ -104,10 +110,7 @@ function Agenda() {
 
   const pendienteSemana = turnos
     .filter((t) => semana.includes(t.fecha) && t.estado !== "cancelado")
-    .reduce((total, t) => {
-      const precio = servicios.find((s) => s.id === t.servicioId)?.precio ?? 0;
-      return total + Math.max(0, precio - pagadoDeTurno(pagos, t.id));
-    }, 0);
+    .reduce((total, t) => total + Math.max(0, t.precioAcordado - pagadoDeTurno(pagos, t.id)), 0);
 
   const rango =
     vista === "semana"
@@ -117,16 +120,20 @@ function Agenda() {
   const ocupadoEn = (dia: string, idx: number) => {
     const conTurno = turnos.some((t) => {
       if (t.fecha !== dia || t.estado === "cancelado") return false;
-      const franjas = franjasDeServicio(
-        servicios.find((s) => s.id === t.servicioId)?.duracion ?? 60,
-      );
+      const franjas = franjasDeServicio(t.duracion);
       const inicio = HORAS.indexOf(t.hora);
       return idx >= inicio && idx < inicio + franjas;
     });
     if (conTurno) return true;
-    return bloqueos.some(
-      (b) => b.fecha === dia && HORAS[idx]! >= b.horaInicio && HORAS[idx]! < b.horaFin,
-    );
+    return bloqueos.some((b) => b.fecha === dia && b.hora === HORAS[idx]);
+  };
+
+  const gruposBloqueo = useMemo(() => agruparBloqueos(bloqueos), [bloqueos]);
+
+  const bloquearDia = (dia: string) => {
+    const horasLibres = HORAS.filter((_, idx) => !ocupadoEn(dia, idx));
+    if (!horasLibres.length) return;
+    bloquearDiaCompleto.mutate({ fecha: dia, horas: horasLibres });
   };
 
   return (
@@ -178,7 +185,9 @@ function Agenda() {
 
             <button
               className={btnPrimario}
-              onClick={() => setModal({ tipo: "nuevo", fecha: vista === "dia" ? fecha : semana[0]! })}
+              onClick={() =>
+                setModal({ tipo: "nuevo", fecha: vista === "dia" ? fecha : semana[0]! })
+              }
             >
               <Plus className="h-4 w-4" /> Nuevo turno
             </button>
@@ -211,7 +220,7 @@ function Agenda() {
           {dias.map((dia) => (
             <div
               key={dia}
-              className={`border-b border-r border-border px-4 py-4 text-center last:border-r-0 ${
+              className={`group relative border-b border-r border-border px-4 py-4 text-center last:border-r-0 ${
                 dia === HOY ? "bg-primary/5" : ""
               }`}
             >
@@ -219,6 +228,15 @@ function Agenda() {
               <p className="text-[0.7rem] uppercase tracking-[0.25em] text-muted-foreground">
                 {fechaCorta(dia)}
               </p>
+              <button
+                title="Bloquear el día completo"
+                aria-label={`Bloquear todo el día ${nombreDia(dia)}`}
+                onClick={() => bloquearDia(dia)}
+                disabled={bloquearDiaCompleto.isPending}
+                className="absolute right-1.5 top-1.5 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-primary group-hover:opacity-100"
+              >
+                <Lock className="h-3 w-3" />
+              </button>
             </div>
           ))}
 
@@ -248,18 +266,18 @@ function Agenda() {
                 />
               ))}
 
-              {bloqueos
-                .filter((b) => b.fecha === dia)
-                .map((b) => {
-                  const top = HORAS.indexOf(b.horaInicio) * ROW;
+              {gruposBloqueo
+                .filter((g) => g.fecha === dia)
+                .map((g) => {
+                  const top = HORAS.indexOf(g.horaInicio) * ROW;
                   const franjas = Math.max(
                     1,
-                    (HORAS.indexOf(b.horaFin) === -1 ? HORAS.length : HORAS.indexOf(b.horaFin)) -
-                      HORAS.indexOf(b.horaInicio),
+                    (HORAS.indexOf(g.horaFin) === -1 ? HORAS.length : HORAS.indexOf(g.horaFin)) -
+                      HORAS.indexOf(g.horaInicio),
                   );
                   return (
                     <div
-                      key={b.id}
+                      key={g.ids.join("-")}
                       className="absolute left-1.5 right-1.5 overflow-hidden rounded-md border border-dashed border-border bg-secondary/70 px-3 py-2"
                       style={{ top: top + 3, height: franjas * ROW - 6 }}
                     >
@@ -269,13 +287,15 @@ function Agenda() {
                         </p>
                         <button
                           aria-label="Quitar bloqueo"
-                          onClick={() => quitarBloqueo(b.id)}
+                          onClick={() => quitarBloqueo.mutate(g.ids)}
                           className="text-muted-foreground transition-colors hover:text-status-danger"
                         >
                           <X className="h-3 w-3" />
                         </button>
                       </div>
-                      <p className="truncate text-xs text-foreground/70">{b.motivo}</p>
+                      <p className="truncate text-xs text-foreground/70">
+                        {g.horaInicio} – {g.horaFin}
+                      </p>
                     </div>
                   );
                 })}
@@ -283,26 +303,23 @@ function Agenda() {
               {turnos
                 .filter((t) => t.fecha === dia)
                 .map((turno) => {
-                  const servicio = servicios.find((s) => s.id === turno.servicioId);
-                  const cliente = clientes.find((c) => c.id === turno.clienteId);
-                  const franjas = franjasDeServicio(servicio?.duracion ?? 60);
+                  const franjas = franjasDeServicio(turno.duracion);
                   const top = HORAS.indexOf(turno.hora) * ROW;
                   const estilo = estadoCard[turno.estado];
                   const tachado = turno.estado === "cancelado" ? "line-through" : "";
-                  const precio = servicio?.precio ?? 0;
-                  const cobro = estadoCobro(precio, pagadoDeTurno(pagos, turno.id));
+                  const cobro = estadoCobro(turno.precioAcordado, pagadoDeTurno(pagos, turno.id));
 
                   return (
                     <button
                       key={turno.id}
                       onClick={() => setModal({ tipo: "turno", turnoId: turno.id })}
-                      title={`${estadoTurnoLabel[turno.estado]} · ${turno.hora}–${sumarMinutos(turno.hora, servicio?.duracion ?? 60)}`}
+                      title={`${estadoTurnoLabel[turno.estado]} · ${turno.hora}–${sumarMinutos(turno.hora, turno.duracion)}`}
                       className={`absolute left-1.5 right-1.5 overflow-hidden rounded-md px-3 py-2 text-left transition-transform hover:-translate-y-0.5 ${estilo.card}`}
                       style={{ top: top + 3, height: franjas * ROW - 6 }}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <p className={`truncate text-xs font-medium tracking-wide ${tachado}`}>
-                          {cliente ? nombreCompleto(cliente) : "Cliente"}
+                          {turno.cliente}
                         </p>
                         <span
                           className={`mt-1 h-2 w-2 shrink-0 rounded-full ${estilo.dot}`}
@@ -310,7 +327,7 @@ function Agenda() {
                         />
                       </div>
                       <p className={`truncate text-[0.7rem] text-muted-foreground ${tachado}`}>
-                        {servicio?.nombre}
+                        {turno.servicio} · {formatoMoneda(turno.precioAcordado)}
                       </p>
                       <p
                         className={`mt-1 flex items-center gap-2 text-[0.65rem] uppercase tracking-[0.2em] ${estilo.hora}`}

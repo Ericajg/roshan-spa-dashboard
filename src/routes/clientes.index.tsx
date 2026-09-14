@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { ChevronRight, Pencil, Plus, Search } from "lucide-react";
+import { AlertTriangle, ChevronRight, Pencil, Plus, Search } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Modal } from "@/components/Modal";
 import {
@@ -13,7 +13,8 @@ import {
   StatCard,
 } from "@/components/ui-kit";
 import { fechaLarga, type Cliente } from "@/lib/mock-data";
-import { nombreCompleto, iniciales, useStore } from "@/lib/store";
+import { nombreCompleto, iniciales, posiblesDuplicados } from "@/lib/store";
+import { useClientes, useCrearCliente, useEditarCliente } from "@/lib/queries";
 
 export const Route = createFileRoute("/clientes/")({
   head: () => ({
@@ -44,9 +45,12 @@ const vacio = {
 };
 
 function Clientes() {
-  const { clientes, turnos, crearCliente, editarCliente } = useStore();
+  const { data: clientes = [] } = useClientes();
+  const crearCliente = useCrearCliente();
+  const editarCliente = useEditarCliente();
   const [busqueda, setBusqueda] = useState("");
   const [editando, setEditando] = useState<Cliente | "nuevo" | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -56,17 +60,7 @@ function Clientes() {
     );
   }, [clientes, busqueda]);
 
-  const sesionesDe = (id: string) =>
-    turnos.filter((t) => t.clienteId === id && t.estado === "realizado").length;
-
-  const ultimaSesionDe = (id: string) =>
-    turnos
-      .filter((t) => t.clienteId === id && t.estado === "realizado")
-      .sort((a, b) =>
-        a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : b.hora.localeCompare(a.hora),
-      )[0];
-
-  const clientesSinSesiones = clientes.filter((c) => sesionesDe(c.id) === 0).length;
+  const clientesSinSesiones = clientes.filter((c) => c.sesionesRealizadas === 0).length;
 
   return (
     <div className="space-y-8">
@@ -85,7 +79,7 @@ function Clientes() {
         <StatCard label="Clientes registrados" valor={String(clientes.length)} />
         <StatCard
           label="Sesiones realizadas"
-          valor={String(turnos.filter((t) => t.estado === "realizado").length)}
+          valor={String(clientes.reduce((a, c) => a + c.sesionesRealizadas, 0))}
         />
         <StatCard label="Clientes sin sesiones" valor={String(clientesSinSesiones)} />
       </div>
@@ -114,7 +108,10 @@ function Clientes() {
           </thead>
           <tbody>
             {filtrados.map((c) => (
-              <tr key={c.id} className="border-b border-border/40 last:border-b-0 hover:bg-accent/40">
+              <tr
+                key={c.id}
+                className="border-b border-border/40 last:border-b-0 hover:bg-accent/40"
+              >
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-primary/40 font-display text-sm text-primary">
@@ -135,10 +132,12 @@ function Clientes() {
                   <p className="text-xs">{c.email}</p>
                 </td>
                 <td className="px-6 py-4 text-muted-foreground">
-                  {ultimaSesionDe(c.id) ? fechaLarga(ultimaSesionDe(c.id)?.fecha ?? "") : "Sin sesiones"}
+                  {c.ultimaSesion ? fechaLarga(c.ultimaSesion) : "Sin sesiones"}
                 </td>
                 <td className="px-6 py-4 text-center">
-                  <Badge tono={sesionesDe(c.id) > 0 ? "oro" : "neutro"}>{sesionesDe(c.id)}</Badge>
+                  <Badge tono={c.sesionesRealizadas > 0 ? "oro" : "neutro"}>
+                    {c.sesionesRealizadas}
+                  </Badge>
                 </td>
                 <td className="px-6 py-4 text-center">
                   <button
@@ -172,14 +171,22 @@ function Clientes() {
         </table>
       </div>
 
+      {error ? <p className="text-sm text-status-danger">{error}</p> : null}
+
       {editando ? (
         <ClienteFormModal
           cliente={editando === "nuevo" ? null : editando}
+          clientesExistentes={clientes}
           onClose={() => setEditando(null)}
-          onGuardar={(datos) => {
-            if (editando === "nuevo") crearCliente(datos);
-            else editarCliente(editando.id, datos);
-            setEditando(null);
+          onGuardar={async (datos) => {
+            setError(null);
+            try {
+              if (editando === "nuevo") await crearCliente.mutateAsync(datos);
+              else await editarCliente.mutateAsync({ id: editando.id, datos });
+              setEditando(null);
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "No se pudo guardar el cliente");
+            }
           }}
         />
       ) : null}
@@ -189,12 +196,14 @@ function Clientes() {
 
 export function ClienteFormModal({
   cliente,
+  clientesExistentes = [],
   onClose,
   onGuardar,
 }: {
   cliente: Cliente | null;
+  clientesExistentes?: Cliente[];
   onClose: () => void;
-  onGuardar: (datos: Omit<Cliente, "id">) => void;
+  onGuardar: (datos: Omit<Cliente, "id">) => void | Promise<void>;
 }) {
   const [form, setForm] = useState<Omit<Cliente, "id">>(
     cliente
@@ -214,6 +223,9 @@ export function ClienteFormModal({
 
   const puede = form.nombre.trim() && form.apellido.trim() && form.telefono.trim();
 
+  // RF-02 / RN-02: avisar si hay un cliente parecido, sin bloquear la carga.
+  const duplicados = posiblesDuplicados(form, clientesExistentes, cliente?.id);
+
   return (
     <Modal
       abierto
@@ -225,7 +237,7 @@ export function ClienteFormModal({
           <button className={btnNeutro} onClick={onClose}>
             Cancelar
           </button>
-          <button className={btnPrimario} disabled={!puede} onClick={() => onGuardar(form)}>
+          <button className={btnPrimario} disabled={!puede} onClick={() => void onGuardar(form)}>
             Guardar cliente
           </button>
         </>
@@ -253,12 +265,32 @@ export function ClienteFormModal({
         </Campo>
       </div>
 
+      {duplicados.length ? (
+        <div className="rounded-md border border-status-warning/50 bg-status-warning/10 px-4 py-3">
+          <p className="flex items-center gap-2 text-xs text-status-warning">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            Ya existe{duplicados.length > 1 ? "n" : ""} un cliente parecido. Revisá antes de crear
+            uno nuevo:
+          </p>
+          <ul className="mt-2 space-y-1">
+            {duplicados.map((d) => (
+              <li key={d.id}>
+                <Link
+                  to="/clientes/$clienteId"
+                  params={{ clienteId: d.id }}
+                  onClick={onClose}
+                  className="text-xs text-primary underline underline-offset-2"
+                >
+                  {nombreCompleto(d)} · {d.telefono}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <Campo label="Email">
-        <Input
-          type="email"
-          value={form.email}
-          onChange={(e) => set("email")(e.target.value)}
-        />
+        <Input type="email" value={form.email} onChange={(e) => set("email")(e.target.value)} />
       </Campo>
 
       <Campo label="Observaciones" hint="Preferencias, alergias, presión, aromas.">

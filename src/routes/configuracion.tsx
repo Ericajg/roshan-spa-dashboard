@@ -3,7 +3,8 @@ import { Clock, Lock, LogOut, ShieldCheck, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Detalle, btnNeutro, btnPeligro } from "@/components/ui-kit";
 import { useAuth } from "@/lib/auth";
-import { useStore } from "@/lib/store";
+import { agruparBloqueos } from "@/lib/store";
+import { useBloqueos, useQuitarBloqueo } from "@/lib/queries";
 import { HORAS, fechaLarga, nombreDia } from "@/lib/mock-data";
 
 export const Route = createFileRoute("/configuracion")({
@@ -27,7 +28,9 @@ export const Route = createFileRoute("/configuracion")({
 
 function Configuracion() {
   const { usuario, cerrarSesion } = useAuth();
-  const { bloqueos, quitarBloqueo } = useStore();
+  const { data: bloqueos = [] } = useBloqueos();
+  const quitarBloqueo = useQuitarBloqueo();
+  const gruposBloqueo = agruparBloqueos(bloqueos);
 
   return (
     <div className="space-y-8">
@@ -42,7 +45,6 @@ function Configuracion() {
           <h2 className="flex items-center gap-2 font-display text-2xl">
             <ShieldCheck className="h-5 w-5 text-primary" /> Cuenta
           </h2>
-          <Detalle label="Nombre">{usuario?.nombre ?? "—"}</Detalle>
           <Detalle label="Usuario">{usuario?.usuario ?? "—"}</Detalle>
           <Detalle label="Contraseña">••••••••</Detalle>
           <p className="text-xs text-muted-foreground">
@@ -74,23 +76,25 @@ function Configuracion() {
         </p>
 
         <ul className="mt-5 space-y-3">
-          {bloqueos.map((b) => (
+          {gruposBloqueo.map((grupo) => (
             <li
-              key={b.id}
+              key={grupo.ids.join("-")}
               className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border/60 px-4 py-3"
             >
               <div>
-                <p className="text-sm text-foreground">{b.motivo}</p>
+                <p className="text-sm text-foreground">
+                  {nombreDia(grupo.fecha)} {fechaLarga(grupo.fecha)}
+                </p>
                 <p className="text-xs text-muted-foreground">
-                  {nombreDia(b.fecha)} {fechaLarga(b.fecha)} · {b.horaInicio} – {b.horaFin}
+                  {grupo.horaInicio} – {grupo.horaFin}
                 </p>
               </div>
-              <button className={btnPeligro} onClick={() => quitarBloqueo(b.id)}>
+              <button className={btnPeligro} onClick={() => quitarBloqueo.mutate(grupo.ids)}>
                 <Trash2 className="h-3.5 w-3.5" /> Quitar
               </button>
             </li>
           ))}
-          {!bloqueos.length ? (
+          {!gruposBloqueo.length ? (
             <li className="py-6 text-center text-sm text-muted-foreground">
               No hay horarios bloqueados.
             </li>

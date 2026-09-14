@@ -14,7 +14,12 @@ import {
   btnPrimario,
 } from "@/components/ui-kit";
 import { formatoMoneda, type Servicio } from "@/lib/mock-data";
-import { useStore } from "@/lib/store";
+import {
+  useAlternarServicio,
+  useCrearServicio,
+  useEditarServicio,
+  useServicios,
+} from "@/lib/queries";
 
 export const Route = createFileRoute("/servicios")({
   head: () => ({
@@ -23,7 +28,7 @@ export const Route = createFileRoute("/servicios")({
       {
         name: "description",
         content:
-          "Catálogo de masajes de Roshan: duración, precio, categoría y disponibilidad de cada servicio.",
+          "Catálogo de masajes de Roshan: duración, precio y disponibilidad de cada servicio.",
       },
       { property: "og:title", content: "Servicios y precios — Roshan Masajes" },
       {
@@ -35,28 +40,26 @@ export const Route = createFileRoute("/servicios")({
   component: Servicios,
 });
 
-const CATEGORIAS = ["Terapéutico", "Relajación", "Premium"];
-
 const vacio: Omit<Servicio, "id"> = {
   nombre: "",
   precio: 25000,
   duracion: 60,
   descripcion: "",
-  categoria: CATEGORIAS[0]!,
   activo: true,
 };
 
 function Servicios() {
-  const { servicios, turnos, crearServicio, editarServicio, alternarServicio } = useStore();
+  const { data: servicios = [] } = useServicios();
+  const crearServicio = useCrearServicio();
+  const editarServicio = useEditarServicio();
+  const alternarServicio = useAlternarServicio();
   const [editando, setEditando] = useState<Servicio | "nuevo" | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const activos = servicios.filter((s) => s.activo);
   const promedio = activos.length
     ? Math.round(activos.reduce((a, s) => a + s.precio, 0) / activos.length)
     : 0;
-
-  const vecesAgendado = (id: string) =>
-    turnos.filter((t) => t.servicioId === id && t.estado !== "cancelado").length;
 
   return (
     <div className="space-y-8">
@@ -88,12 +91,7 @@ function Servicios() {
             className={`panel-luxe flex flex-col rounded-xl p-6 ${s.activo ? "" : "opacity-60"}`}
           >
             <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-[0.62rem] uppercase tracking-[0.28em] text-primary/70">
-                  {s.categoria}
-                </p>
-                <h2 className="mt-1 font-display text-2xl leading-tight">{s.nombre}</h2>
-              </div>
+              <h2 className="font-display text-2xl leading-tight">{s.nombre}</h2>
               <Badge tono={s.activo ? "verde" : "neutro"}>{s.activo ? "Activo" : "Inactivo"}</Badge>
             </div>
 
@@ -106,20 +104,13 @@ function Servicios() {
               </p>
             </div>
 
-            <p className="mt-2 text-xs text-muted-foreground">
-              {vecesAgendado(s.id)} turnos agendados
-            </p>
-
             <div className="mt-5 flex gap-2 border-t border-border/50 pt-4">
-              <button
-                className={`${btnNeutro} flex-1`}
-                onClick={() => setEditando(s)}
-              >
+              <button className={`${btnNeutro} flex-1`} onClick={() => setEditando(s)}>
                 <Pencil className="h-3.5 w-3.5" /> Editar
               </button>
               <button
                 className={`${btnNeutro} flex-1 ${s.activo ? "hover:text-status-danger" : "hover:text-status-success"}`}
-                onClick={() => alternarServicio(s.id)}
+                onClick={() => alternarServicio.mutate({ id: s.id, activo: s.activo })}
               >
                 <Power className="h-3.5 w-3.5" /> {s.activo ? "Desactivar" : "Activar"}
               </button>
@@ -128,14 +119,21 @@ function Servicios() {
         ))}
       </div>
 
+      {error ? <p className="text-sm text-status-danger">{error}</p> : null}
+
       {editando ? (
         <ServicioFormModal
           servicio={editando === "nuevo" ? null : editando}
           onClose={() => setEditando(null)}
-          onGuardar={(datos) => {
-            if (editando === "nuevo") crearServicio(datos);
-            else editarServicio(editando.id, datos);
-            setEditando(null);
+          onGuardar={async (datos) => {
+            setError(null);
+            try {
+              if (editando === "nuevo") await crearServicio.mutateAsync(datos);
+              else await editarServicio.mutateAsync({ id: editando.id, datos });
+              setEditando(null);
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "No se pudo guardar el servicio");
+            }
           }}
         />
       ) : null}
@@ -150,7 +148,7 @@ function ServicioFormModal({
 }: {
   servicio: Servicio | null;
   onClose: () => void;
-  onGuardar: (datos: Omit<Servicio, "id">) => void;
+  onGuardar: (datos: Omit<Servicio, "id">) => void | Promise<void>;
 }) {
   const [form, setForm] = useState<Omit<Servicio, "id">>(
     servicio
@@ -159,7 +157,6 @@ function ServicioFormModal({
           precio: servicio.precio,
           duracion: servicio.duracion,
           descripcion: servicio.descripcion,
-          categoria: servicio.categoria,
           activo: servicio.activo,
         }
       : vacio,
@@ -178,7 +175,7 @@ function ServicioFormModal({
           <button className={btnNeutro} onClick={onClose}>
             Cancelar
           </button>
-          <button className={btnPrimario} disabled={!puede} onClick={() => onGuardar(form)}>
+          <button className={btnPrimario} disabled={!puede} onClick={() => void onGuardar(form)}>
             Guardar servicio
           </button>
         </>
@@ -191,7 +188,7 @@ function ServicioFormModal({
         />
       </Campo>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         <Campo label="Precio">
           <Input
             type="number"
@@ -212,18 +209,6 @@ function ServicioFormModal({
             <option value={120}>120 min</option>
           </Select>
         </Campo>
-        <Campo label="Categoría">
-          <Select
-            value={form.categoria}
-            onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))}
-          >
-            {CATEGORIAS.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </Select>
-        </Campo>
       </div>
 
       <Campo label="Descripción">
@@ -234,15 +219,11 @@ function ServicioFormModal({
         />
       </Campo>
 
-      <label className="flex items-center gap-3 text-sm text-muted-foreground">
-        <input
-          type="checkbox"
-          checked={form.activo}
-          onChange={(e) => setForm((f) => ({ ...f, activo: e.target.checked }))}
-          className="h-4 w-4 accent-primary"
-        />
-        Disponible para agendar
-      </label>
+      {servicio ? null : (
+        <p className="text-xs text-muted-foreground">
+          El servicio se crea activo. Para desactivarlo, usá el botón "Desactivar" de su tarjeta.
+        </p>
+      )}
     </Modal>
   );
 }

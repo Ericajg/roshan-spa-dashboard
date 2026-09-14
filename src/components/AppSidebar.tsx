@@ -55,7 +55,7 @@ export function AppSidebar() {
       <div className="mt-auto px-6 py-8">
         <div className="rounded-md border border-border/60 px-4 py-3">
           <p className="text-[0.65rem] uppercase tracking-[0.3em] text-muted-foreground">Sesión</p>
-          <p className="mt-1 font-display text-lg text-primary">{usuario?.nombre ?? "Studio"}</p>
+          <p className="mt-1 font-display text-lg text-primary">{usuario?.usuario ?? "Studio"}</p>
           <p className="text-xs text-muted-foreground">Panel del propietario</p>
         </div>
       </div>

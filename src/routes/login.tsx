@@ -24,15 +24,13 @@ export const Route = createFileRoute("/login")({
 });
 
 function Login() {
-  const { iniciarSesion } = useAuth();
+  const { iniciarSesion, cargando, error } = useAuth();
   const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState(false);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const ok = iniciarSesion(usuario, password);
-    setError(!ok);
+    void iniciarSesion(usuario, password);
   };
 
   return (
@@ -54,10 +52,7 @@ function Login() {
           <Campo label="Usuario">
             <Input
               value={usuario}
-              onChange={(e) => {
-                setUsuario(e.target.value);
-                setError(false);
-              }}
+              onChange={(e) => setUsuario(e.target.value)}
               autoComplete="username"
               placeholder="riki"
             />
@@ -67,10 +62,7 @@ function Login() {
             <Input
               type="password"
               value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                setError(false);
-              }}
+              onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
               placeholder="••••••••"
             />
@@ -82,17 +74,13 @@ function Login() {
               className="flex items-center gap-2 rounded-md border border-status-danger/50 bg-status-danger/10 px-3 py-2 text-xs text-status-danger"
             >
               <AlertCircle className="h-4 w-4 shrink-0" />
-              Usuario o contraseña incorrectos.
+              {error}
             </p>
           ) : null}
 
-          <button type="submit" className={`${btnPrimario} w-full`}>
-            <LogIn className="h-4 w-4" /> Iniciar sesión
+          <button type="submit" disabled={cargando} className={`${btnPrimario} w-full`}>
+            <LogIn className="h-4 w-4" /> {cargando ? "Ingresando…" : "Iniciar sesión"}
           </button>
-
-          <p className="text-center text-[0.65rem] uppercase tracking-[0.24em] text-muted-foreground">
-            Acceso de prueba · riki / roshan2026
-          </p>
         </form>
       </div>
     </div>

@@ -20,6 +20,10 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Config local (URL de la API, etc.)
+.env
+run-dev.bat
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

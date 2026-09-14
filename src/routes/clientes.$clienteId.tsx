@@ -10,7 +10,8 @@ import {
   estadoTurnoTono,
 } from "@/components/turno-modals";
 import { HOY, fechaLarga, formatoMoneda, nombreDia } from "@/lib/mock-data";
-import { iniciales, nombreCompleto, pagadoDeTurno, useStore } from "@/lib/store";
+import { iniciales, nombreCompleto } from "@/lib/store";
+import { useClientes, useCliente, useEditarCliente, useHistorialCliente } from "@/lib/queries";
 
 export const Route = createFileRoute("/clientes/$clienteId")({
   head: () => ({
@@ -40,15 +41,17 @@ type Modal =
 
 function FichaCliente() {
   const { clienteId } = Route.useParams();
-  const { clientes, turnos, servicios, pagos, atenciones, editarCliente } = useStore();
+  const { data: cliente } = useCliente(clienteId);
+  const { data: historialDatos } = useHistorialCliente(clienteId);
+  const { data: clientes = [] } = useClientes();
+  const editarCliente = useEditarCliente();
   const [modal, setModal] = useState<Modal>(null);
-
-  const cliente = clientes.find((c) => c.id === clienteId);
+  const [error, setError] = useState<string | null>(null);
 
   if (!cliente) {
     return (
       <div className="space-y-4">
-        <h1 className="font-display text-3xl">Cliente no encontrado</h1>
+        <h1 className="font-display text-3xl">Cargando…</h1>
         <Link to="/clientes" className={btnFantasma}>
           <ArrowLeft className="h-4 w-4" /> Volver a clientes
         </Link>
@@ -56,18 +59,12 @@ function FichaCliente() {
     );
   }
 
-  const historial = turnos
-    .filter((t) => t.clienteId === cliente.id)
-    .sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : b.hora.localeCompare(a.hora)));
-
+  const historial = historialDatos?.historial ?? [];
   const realizadas = historial.filter((t) => t.estado === "realizado").length;
-  const totalPagado = historial.reduce((a, t) => a + pagadoDeTurno(pagos, t.id), 0);
+  const totalPagado = historial.reduce((a, t) => a + t.totalPagado, 0);
   const saldo = historial
     .filter((t) => t.estado !== "cancelado")
-    .reduce((total, t) => {
-      const precio = servicios.find((s) => s.id === t.servicioId)?.precio ?? 0;
-      return total + Math.max(0, precio - pagadoDeTurno(pagos, t.id));
-    }, 0);
+    .reduce((total, t) => total + Math.max(0, t.saldoPendiente), 0);
   const ultima = historial.find((t) => t.estado === "realizado");
 
   return (
@@ -86,7 +83,9 @@ function FichaCliente() {
           </span>
           <div className="min-w-0">
             <p className="text-[0.65rem] uppercase tracking-[0.4em] text-primary/70">Ficha</p>
-            <h1 className="mt-1 break-words font-display text-3xl sm:text-4xl">{nombreCompleto(cliente)}</h1>
+            <h1 className="mt-1 break-words font-display text-3xl sm:text-4xl">
+              {nombreCompleto(cliente)}
+            </h1>
             <p className="mt-2 flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:flex-wrap sm:gap-4">
               <span className="flex min-w-0 items-center gap-2">
                 <Phone className="h-3.5 w-3.5" /> {cliente.telefono}
@@ -135,55 +134,72 @@ function FichaCliente() {
         <div className="panel-luxe rounded-xl p-6 lg:col-span-2">
           <h2 className="font-display text-2xl">Historial de turnos</h2>
           <div className="mt-4 space-y-3">
-            {historial.map((t) => {
-              const servicio = servicios.find((s) => s.id === t.servicioId);
-              const atencion = atenciones.find((a) => a.turnoId === t.id);
-              const pagado = pagadoDeTurno(pagos, t.id);
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setModal({ tipo: "turno", turnoId: t.id })}
-                  className="block w-full rounded-md border border-border/60 px-4 py-4 text-left transition-colors hover:border-primary/40 hover:bg-accent/40"
-                >
-                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] xl:items-center">
-                    <div className="min-w-0">
-                      <p className="text-[0.62rem] uppercase tracking-[0.22em] text-muted-foreground">Servicio</p>
-                      <p className="mt-1 text-sm text-foreground">{servicio?.nombre ?? "—"}</p>
-                    </div>
-                    <div>
-                      <p className="text-[0.62rem] uppercase tracking-[0.22em] text-muted-foreground">Fecha y hora</p>
-                      <p className="mt-1 text-sm text-foreground">
-                        {nombreDia(t.fecha)} {fechaLarga(t.fecha)} · {t.hora}
-                      </p>
-                    </div>
-                    <div className="sm:col-span-2 xl:col-span-1 xl:text-right">
-                      <p className="text-[0.62rem] uppercase tracking-[0.22em] text-muted-foreground">Estado</p>
-                      <div className="mt-1 inline-flex">
-                        <Badge tono={estadoTurnoTono[t.estado]}>
-                          {t.estado === "ausente" ? "No asistió" : t.estado === "reservado" ? "Reservado" : t.estado === "realizado" ? "Realizado" : "Cancelado"}
-                        </Badge>
-                      </div>
+            {historial.map((t) => (
+              <button
+                key={t.idTurno}
+                onClick={() => setModal({ tipo: "turno", turnoId: t.idTurno })}
+                className="block w-full rounded-md border border-border/60 px-4 py-4 text-left transition-colors hover:border-primary/40 hover:bg-accent/40"
+              >
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] xl:items-center">
+                  <div className="min-w-0">
+                    <p className="text-[0.62rem] uppercase tracking-[0.22em] text-muted-foreground">
+                      Servicio
+                    </p>
+                    <p className="mt-1 text-sm text-foreground">{t.servicio}</p>
+                  </div>
+                  <div>
+                    <p className="text-[0.62rem] uppercase tracking-[0.22em] text-muted-foreground">
+                      Fecha y hora
+                    </p>
+                    <p className="mt-1 text-sm text-foreground">
+                      {nombreDia(t.fecha)} {fechaLarga(t.fecha)} · {t.hora}
+                    </p>
+                  </div>
+                  <div className="sm:col-span-2 xl:col-span-1 xl:text-right">
+                    <p className="text-[0.62rem] uppercase tracking-[0.22em] text-muted-foreground">
+                      Estado
+                    </p>
+                    <div className="mt-1 inline-flex">
+                      <Badge tono={estadoTurnoTono[t.estado]}>
+                        {t.estado === "ausente"
+                          ? "No asistió"
+                          : t.estado === "reservado"
+                            ? "Reservado"
+                            : t.estado === "realizado"
+                              ? "Realizado"
+                              : "Cancelado"}
+                      </Badge>
                     </div>
                   </div>
-                  <div className="mt-4 grid grid-cols-2 gap-4 border-t border-border/40 pt-3">
-                    <div>
-                      <p className="text-[0.62rem] uppercase tracking-[0.22em] text-muted-foreground">Importe abonado</p>
-                      <p className="mt-1 text-sm text-foreground">{formatoMoneda(pagado)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[0.62rem] uppercase tracking-[0.22em] text-muted-foreground">Precio total</p>
-                      <p className="mt-1 text-sm text-foreground">{formatoMoneda(servicio?.precio ?? 0)}</p>
-                    </div>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-4 border-t border-border/40 pt-3">
+                  <div>
+                    <p className="text-[0.62rem] uppercase tracking-[0.22em] text-muted-foreground">
+                      Importe abonado
+                    </p>
+                    <p className="mt-1 text-sm text-foreground">{formatoMoneda(t.totalPagado)}</p>
                   </div>
-                  {atencion ? (
-                    <div className="mt-3 border-t border-status-success/30 pt-3">
-                      <p className="text-[0.62rem] uppercase tracking-[0.22em] text-status-success">Observaciones de la atención</p>
-                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{atencion.observaciones}</p>
-                    </div>
-                  ) : null}
-                </button>
-              );
-            })}
+                  <div>
+                    <p className="text-[0.62rem] uppercase tracking-[0.22em] text-muted-foreground">
+                      Precio total
+                    </p>
+                    <p className="mt-1 text-sm text-foreground">
+                      {formatoMoneda(t.precioAcordado)}
+                    </p>
+                  </div>
+                </div>
+                {t.observaciones ? (
+                  <div className="mt-3 border-t border-status-success/30 pt-3">
+                    <p className="text-[0.62rem] uppercase tracking-[0.22em] text-status-success">
+                      Observaciones de la atención
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                      {t.observaciones}
+                    </p>
+                  </div>
+                ) : null}
+              </button>
+            ))}
             {!historial.length ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 Todavía no tiene turnos registrados.
@@ -193,13 +209,21 @@ function FichaCliente() {
         </div>
       </div>
 
+      {error ? <p className="text-sm text-status-danger">{error}</p> : null}
+
       {modal?.tipo === "editar" ? (
         <ClienteFormModal
           cliente={cliente}
+          clientesExistentes={clientes}
           onClose={() => setModal(null)}
-          onGuardar={(datos) => {
-            editarCliente(cliente.id, datos);
-            setModal(null);
+          onGuardar={async (datos) => {
+            setError(null);
+            try {
+              await editarCliente.mutateAsync({ id: cliente.id, datos });
+              setModal(null);
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "No se pudo guardar el cliente");
+            }
           }}
         />
       ) : null}

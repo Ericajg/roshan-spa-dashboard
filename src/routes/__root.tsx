@@ -15,7 +15,6 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AuthProvider, useAuth } from "@/lib/auth";
-import { StoreProvider } from "@/lib/store";
 
 function NotFoundComponent() {
   return (
@@ -126,9 +125,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <StoreProvider>
-          <Shell />
-        </StoreProvider>
+        <Shell />
       </AuthProvider>
     </QueryClientProvider>
   );
